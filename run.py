@@ -4,8 +4,6 @@ import os
 import json
 import pprint as pp
 
-import wandb
-
 import torch
 import torch.optim as optim
 from tensorboard_logger import Logger as TbLogger
@@ -16,7 +14,7 @@ from train import train_epoch, validate, get_inner_model
 from reinforce_baselines import NoBaseline, ExponentialBaseline, CriticBaseline, RolloutBaseline, WarmupBaseline
 from nets.attention_model import AttentionModel
 from nets.pointer_network import PointerNetwork, CriticNetworkLSTM
-from utils import torch_load_cpu, load_problem
+from utils import torch_load_cpu, load_problem, move_to
 
 
 def run(opts):
@@ -81,7 +79,7 @@ def run(opts):
     if opts.baseline == 'exponential':
         baseline = ExponentialBaseline(opts.exp_beta)
     elif opts.baseline == 'critic' or opts.baseline == 'critic_lstm':
-        assert problem.NAME == 'tsp', "Critic only supported for TSP"
+        # assert problem.NAME == 'tsp', "Critic only supported for TSP"
         baseline = CriticBaseline(
             (
                 CriticNetworkLSTM(
@@ -156,8 +154,10 @@ def run(opts):
     if opts.eval_only:
         validate(model, val_dataset, opts)
     else:
+        old_log_probabilities = None
         for epoch in range(opts.epoch_start, opts.epoch_start + opts.n_epochs):
-            train_epoch(
+          #print('First Try of Old Log Probs', old_log_probabilities)
+            old_log_probabilities = train_epoch(
                 model,
                 optimizer,
                 baseline,
@@ -166,17 +166,14 @@ def run(opts):
                 val_dataset,
                 problem,
                 tb_logger,
-                opts
+                opts,
+                old_log_probabilities
             )
-
+            
+            old_log_probabilities = move_to(old_log_probabilities.detach(), opts.device)
+          #print('Second Try of Old Log Probs', old_log_probabilities)
+          # print(old_log_probabilities)
 
 
 if __name__ == "__main__":
-    # 1. Start a new run
-    wandb.init(project="vrp")
-
-    # 2. Save model inputs and hyperparameters
-    config = wandb.config
-    config.lr_model = 0.001
-
     run(get_options())

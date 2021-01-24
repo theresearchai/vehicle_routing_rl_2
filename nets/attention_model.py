@@ -140,11 +140,11 @@ class AttentionModel(nn.Module):
         cost, mask = self.problem.get_costs(input, pi)
         # Log likelyhood is calculated within the model since returning it per action does not work well with
         # DataParallel since sequences can be of different lengths
-        ll = self._calc_log_likelihood(_log_p, pi, mask)
+        ll, log_prob = self._calc_log_likelihood(_log_p, pi, mask)
         if return_pi:
-            return cost, ll, pi
+            return cost, ll, pi, log_prob
 
-        return cost, ll
+        return cost, ll, log_prob
 
     def beam_search(self, *args, **kwargs):
         return self.problem.beam_search(*args, **kwargs, model=self)
@@ -193,11 +193,11 @@ class AttentionModel(nn.Module):
         # Optional: mask out actions irrelevant to objective so they do not get reinforced
         if mask is not None:
             log_p[mask] = 0
-
+        
         assert (log_p > -1000).data.all(), "Logprobs should not be -inf, check sampling procedure!"
 
         # Calculate log_likelihood
-        return log_p.sum(1)
+        return log_p.sum(1), log_p
 
     def _init_embed(self, input):
 
@@ -228,7 +228,7 @@ class AttentionModel(nn.Module):
         sequences = []
 
         state = self.problem.make_state(input)
-
+        
         # Compute keys, values for the glimpse and keys for the logits once as they can be reused in every step
         fixed = self._precompute(embeddings)
 
@@ -237,7 +237,7 @@ class AttentionModel(nn.Module):
         # Perform decoding steps
         i = 0
         while not (self.shrink_size is None and state.all_finished()):
-
+            
             if self.shrink_size is not None:
                 unfinished = torch.nonzero(state.get_finished() == 0)
                 if len(unfinished) == 0:
@@ -251,7 +251,7 @@ class AttentionModel(nn.Module):
                     fixed = fixed[unfinished]
 
             log_p, mask = self._get_log_p(fixed, state)
-
+            
             # Select the indices of the next nodes in the sequences, result (batch_size) long
             selected = self._select_node(log_p.exp()[:, 0, :], mask[:, 0, :])  # Squeeze out steps dimension
 
@@ -309,6 +309,8 @@ class AttentionModel(nn.Module):
 
         else:
             assert False, "Unknown decode type"
+
+        # print('Selected indexs: ', selected, selected.shape, probs.shape)
         return selected
 
     def _precompute(self, embeddings, num_steps=1):
