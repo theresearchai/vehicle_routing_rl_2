@@ -4,7 +4,7 @@ import argparse
 import torch
 
 
-def get_options(args=None):
+def get_options(lr_model_val=0.0001, lr_critic_val=0.0001, args=None):
     parser = argparse.ArgumentParser(
         description="Attention based model for solving the Travelling Salesman Problem with Reinforcement Learning")
 
@@ -29,8 +29,10 @@ def get_options(args=None):
     parser.add_argument('--normalization', default='batch', help="Normalization type, 'batch' (default) or 'instance'")
 
     # Training
-    parser.add_argument('--lr_model', type=float, default=1e-4, help="Set the learning rate for the actor network")
-    parser.add_argument('--lr_critic', type=float, default=1e-4, help="Set the learning rate for the critic network")
+    parser.add_argument('--lr_model', type=float, default=lr_model_val,
+                        help="Set the learning rate for the actor network")
+    parser.add_argument('--lr_critic', type=float, default=lr_critic_val,
+                        help="Set the learning rate for the critic network")
     parser.add_argument('--lr_decay', type=float, default=1.0, help='Learning rate decay per epoch')
     parser.add_argument('--eval_only', action='store_true', help='Set this value to only evaluate model')
     parser.add_argument('--n_epochs', type=int, default=100, help='The number of epochs to train')
