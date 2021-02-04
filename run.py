@@ -3,7 +3,7 @@
 import os
 import json
 import pprint as pp
-
+import wandb
 import torch
 import torch.optim as optim
 from tensorboard_logger import Logger as TbLogger
@@ -17,7 +17,9 @@ from nets.pointer_network import PointerNetwork, CriticNetworkLSTM
 from utils import torch_load_cpu, load_problem, move_to
 
 
-def run(opts):
+def run():
+    runs = wandb.init(project="ppo")
+    opts = get_options(runs.config.lr_model_val, runs.config.lr_critic_val)
 
     # Pretty print the run args
     pp.pprint(vars(opts))
@@ -156,7 +158,7 @@ def run(opts):
     else:
         old_log_probabilities = None
         for epoch in range(opts.epoch_start, opts.epoch_start + opts.n_epochs):
-          #print('First Try of Old Log Probs', old_log_probabilities)
+            # print('First Try of Old Log Probs', old_log_probabilities)
             old_log_probabilities = train_epoch(
                 model,
                 optimizer,
@@ -167,13 +169,32 @@ def run(opts):
                 problem,
                 tb_logger,
                 opts,
+                runs,
                 old_log_probabilities
             )
-            
+
             old_log_probabilities = move_to(old_log_probabilities.detach(), opts.device)
-          #print('Second Try of Old Log Probs', old_log_probabilities)
-          # print(old_log_probabilities)
+        # print('Second Try of Old Log Probs', old_log_probabilities)
+        # print(old_log_probabilities)
 
 
 if __name__ == "__main__":
-    run(get_options())
+    sweep_config = {
+        'method': 'grid',  # grid, random
+        'metric': {
+            'name': 'loss',
+            'goal': 'minimise'
+        },
+        'parameters': {
+            'lr_model_val': {
+                'values': [1e-3, 1e-4, 2e-4, 2e-5, 1e-5]
+            },
+            'lr_critic_val': {
+                'values': [1e-3, 1e-4, 2e-4, 2e-5, 1e-5]
+            }
+        }
+    }
+    sweep_id = wandb.sweep(sweep_config, entity="medhasagar", project="ppo")
+
+    wandb.agent(sweep_id, run)
+
