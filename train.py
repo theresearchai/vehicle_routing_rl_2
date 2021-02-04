@@ -4,7 +4,7 @@ from tqdm import tqdm
 import torch
 import math
 import numpy as np
-
+import wandb
 from torch.utils.data import DataLoader
 from torch.nn import DataParallel
 
@@ -66,7 +66,7 @@ def clip_grad_norms(param_groups, max_norm=math.inf):
     return grad_norms, grad_norms_clipped
 
 
-def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, problem, tb_logger, opts, old_log_probabilities = None):
+def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, problem, tb_logger, opts, runs, old_log_probabilities = None):
     print("Start train epoch {}, lr={} for run {}".format(epoch, optimizer.param_groups[0]['lr'], opts.run_name))
     step = epoch * (opts.epoch_size // opts.batch_size)
     start_time = time.time()
@@ -96,7 +96,9 @@ def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, pr
             batch,
             tb_logger,
             opts,
+            runs,
             old_log_probabilities
+
         )
         collect_old_log_probabilities.append(old_log_prob)
         step += 1
@@ -140,6 +142,7 @@ def train_batch(
         batch,
         tb_logger,
         opts,
+        runs,
         old_log_prob = None
 ):
     x, bl_val = baseline.unwrap_batch(batch)
@@ -198,6 +201,8 @@ def train_batch(
     # print('Critic loss: ', critic_loss)
     # print('Entropy: ', entropy)
     loss = 0.5 * critic_loss + actor_loss - 0.001 * entropy
+
+    wandb.log({"LR_model": runs.config.lr_model_val, "LR_critic": runs.config.lr_critic_val, "loss": loss})
 
     # Perform backward pass and optimization step
     optimizer.zero_grad()
