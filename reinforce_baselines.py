@@ -119,8 +119,9 @@ class CriticBaseline(Baseline):
 
     def eval(self, x, c):
         v = self.critic(x)
+        # print('V.shape', torch.reshape(v, (-1,)).shape)
         # Detach v since actor should not backprop through baseline, only for loss
-        return v.detach(), F.mse_loss(v, c.detach())
+        return v.detach(), F.mse_loss(torch.reshape(v, (-1,)), c.detach())
 
     def get_learnable_parameters(self):
         return list(self.critic.parameters())
