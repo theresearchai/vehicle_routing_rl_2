@@ -160,8 +160,11 @@ def train_batch(
     # Evaluate baseline, get baseline loss if any (only for critic)
     bl_val, bl_loss = baseline.eval(x, cost) if bl_val is None else (bl_val, 0)
 
+    # Reshape critic output to for faster operations
+    bl_val_1 = torch.reshape(bl_val, (-1,))
+    
     # Calculate loss
-    reinforce_loss = ((cost - bl_val) * log_likelihood).mean()
+    # reinforce_loss = ((cost - bl_val) * log_likelihood).mean()
     advantage = cost - bl_val
     clip_param = 0.2
     # if epoch == 0:
@@ -176,7 +179,7 @@ def train_batch(
     surr2 = torch.clamp(ratio, 1.0 - clip_param, 1.0 + clip_param) #removed advantage
     actor_loss = torch.min(surr1, surr2)  #removed negative and mean
     
-    loss = 0.5*bl_loss + ((cost - bl_val) * actor_loss).mean() #reinforce_loss + bl_loss
+    loss = 0.5 * bl_loss + (-(bl_val_1 - cost) * actor_loss).mean() #Added negative sign
 
     # Perform backward pass and optimization step
     optimizer.zero_grad()
@@ -188,5 +191,5 @@ def train_batch(
     # Logging
     if step % int(opts.log_step) == 0:
         log_values(cost, grad_norms, epoch, batch_id, step,
-                   log_likelihood, reinforce_loss, bl_loss, tb_logger, opts)
+                   log_likelihood, loss, bl_loss, tb_logger, opts)
     return log_likelihood
