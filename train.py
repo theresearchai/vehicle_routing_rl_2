@@ -8,7 +8,6 @@ import numpy as np
 from torch.utils.data import DataLoader
 from torch.nn import DataParallel
 
-from torch.distributions import Categorical
 from nets.attention_model import set_decode_type
 from utils.log_utils import log_values
 from utils import move_to
@@ -36,7 +35,7 @@ def rollout(model, dataset, opts):
 
     def eval_model_bat(bat):
         with torch.no_grad():
-            cost, _, __ = model(move_to(bat, opts.device))
+            cost, _ = model(move_to(bat, opts.device))
         return cost.data.cpu()
 
     return torch.cat([
@@ -66,7 +65,7 @@ def clip_grad_norms(param_groups, max_norm=math.inf):
     return grad_norms, grad_norms_clipped
 
 
-def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, problem, tb_logger, opts, old_log_probabilities = None):
+def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, problem, tb_logger, opts, old_log_likelihood = None):
     print("Start train epoch {}, lr={} for run {}".format(epoch, optimizer.param_groups[0]['lr'], opts.run_name))
     step = epoch * (opts.epoch_size // opts.batch_size)
     start_time = time.time()
@@ -82,11 +81,10 @@ def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, pr
     # Put model in train mode!
     model.train()
     set_decode_type(model, "sampling")
-    collect_old_log_probabilities = []
-    # collect_old_log_probabilities = move_to(collect_old_log_probabilities, opts.device)
+    collect_old_log_likelihoods = []
     for batch_id, batch in enumerate(tqdm(training_dataloader, disable=opts.no_progress_bar)):
 
-        old_log_prob = train_batch(
+        old_log_like = train_batch(
             model,
             optimizer,
             baseline,
@@ -96,11 +94,11 @@ def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, pr
             batch,
             tb_logger,
             opts,
-            old_log_probabilities
+            old_log_likelihood
         )
-        collect_old_log_probabilities.append(old_log_prob)
+        collect_old_log_likelihoods.append(old_log_like)
         step += 1
-    print(collect_old_log_probabilities[-1], len(collect_old_log_probabilities))
+    print(collect_old_log_likelihoods[-1], len(collect_old_log_likelihoods))
     epoch_duration = time.time() - start_time
     print("Finished epoch {}, took {} s".format(epoch, time.strftime('%H:%M:%S', time.gmtime(epoch_duration))))
 
@@ -126,7 +124,7 @@ def train_epoch(model, optimizer, baseline, lr_scheduler, epoch, val_dataset, pr
 
     # lr_scheduler should be called at end of epoch
     lr_scheduler.step()
-    last_iter_log_prob = move_to(collect_old_log_probabilities[-1], opts.device)
+    last_iter_log_prob = move_to(collect_old_log_likelihoods[-1], opts.device)
     return last_iter_log_prob
 
 
@@ -140,64 +138,45 @@ def train_batch(
         batch,
         tb_logger,
         opts,
-        old_log_prob = None
+        old_log_likelihood = None
 ):
     x, bl_val = baseline.unwrap_batch(batch)
     x = move_to(x, opts.device)
     bl_val = move_to(bl_val, opts.device) if bl_val is not None else None
-    
     # Evaluate model, get costs and log probabilities
-    cost, log_likelihood, log_probabilities = model(x)
-    shapeOfLog_probabilities = log_probabilities.shape
-    
-    if old_log_prob == None:
-      old_log_prob = torch.zeros(size = shapeOfLog_probabilities)
-    with torch.no_grad():
-      entropy = Categorical(probs = torch.exp(log_probabilities)).entropy().mean()
-      entropy = move_to(entropy, opts.device)
+    cost, log_likelihood = model(x)
+    # likelihood = log_likelihood.exp()
 
-    # print(old_log_prob.shape)
-    # print(log_probabilities.shape)
-    
-    diff = old_log_prob.shape[1] - log_probabilities.shape[1]
-    if diff > 0:
-        log_probabilites_arr = log_probabilities.cpu().detach().numpy()
-        padded_log_probabilities_arr = np.pad(log_probabilites_arr, ((0, 0), (0, diff)), 'constant', constant_values=(-999,))
-        log_probabilities = torch.tensor(padded_log_probabilities_arr)
-    elif diff < 0:
-        old_log_probabilites_arr = old_log_prob.cpu().detach().numpy()
-        # padded_old_log_probabilities_arr = np.pad(old_log_probabilites_arr, ((0, 0), (0, -diff)), -999)
-        padded_old_log_probabilities_arr = np.pad(old_log_probabilites_arr, ((0, 0), (0, -diff)), 'constant', constant_values=(-999,))
-        old_log_prob = torch.tensor(padded_old_log_probabilities_arr)
+    # print(likelihood)
+    shapeOfLikelihood = log_likelihood.shape
+    if old_log_likelihood == None:
+        mean_likelihood = log_likelihood.mean().item()
+        old_log_likelihood = np.full(shapeOfLikelihood[0], mean_likelihood)
+        old_log_likelihood = torch.as_tensor(old_log_likelihood)
 
-    old_log_prob = move_to(old_log_prob, opts.device)
-    log_probabilities = move_to(log_probabilities, opts.device)
+    old_log_likelihood = move_to(old_log_likelihood, opts.device)
+    log_likelihood = move_to(log_likelihood, opts.device)
 
     # Evaluate baseline, get baseline loss if any (only for critic)
-    bl_val, bl_loss = baseline.eval(x['loc'], cost) if bl_val is None else (bl_val, 0)
-    bl_val_1 = torch.reshape(bl_val, (-1,))
-    
+    bl_val, bl_loss = baseline.eval(x, cost) if bl_val is None else (bl_val, 0)
+
     # Calculate loss
     reinforce_loss = ((cost - bl_val) * log_likelihood).mean()
-    # loss = reinforce_loss + bl_loss
-    advantage = cost - bl_val_1
-    advantage = torch.reshape(advantage, (advantage.shape[0], 1))
+    advantage = cost - bl_val
     clip_param = 0.2
-    # log_probabilities = torch.tensor(log_probabilities).cuda()
-    # old_log_prob = torch.tensor(old_log_prob).cuda()
-    ratio = (log_probabilities - old_log_prob).exp() #calc ratio for ppo
+    # if epoch == 0:
+    #   ratio = log_likelihood
+    # else:
+    #   ratio = log_likelihood - old_log_likelihood
 
-    #print('Shape of Ratio: ', ratio.shape)
-    #print('Shape of Advantage: ', advantage.shape)
-    #print('Baseline loss: ', bl_loss)
-    surr1 = torch.mul(advantage, ratio)     
-    surr2 = torch.mul(torch.clamp(ratio, 1.0 - clip_param, 1.0 + clip_param), advantage) # torch.mul(advantage, torch.clamp(ratio, 1.0 - clip_param, 1.0 + clip_param)) advantage * torch.clamp(ratio, 1.0 - clip_param, 1.0 + clip_param)
-    actor_loss  = - torch.min(surr1, surr2).mean() 
-    critic_loss = bl_loss
-    # print('Actor loss: ', actor_loss)
-    # print('Critic loss: ', critic_loss)
-    # print('Entropy: ', entropy)
-    loss = 0.5 * critic_loss + actor_loss - 0.001 * entropy
+    ratio = log_likelihood - old_log_likelihood
+    ratio = torch.exp(ratio) #removed exponentiated
+
+    surr1 = ratio #removed advantage
+    surr2 = torch.clamp(ratio, 1.0 - clip_param, 1.0 + clip_param) #removed advantage
+    actor_loss = torch.min(surr1, surr2)  #removed negative and mean
+    
+    loss = 0.5*bl_loss + ((cost - bl_val) * actor_loss).mean() #reinforce_loss + bl_loss
 
     # Perform backward pass and optimization step
     optimizer.zero_grad()
@@ -210,4 +189,4 @@ def train_batch(
     if step % int(opts.log_step) == 0:
         log_values(cost, grad_norms, epoch, batch_id, step,
                    log_likelihood, reinforce_loss, bl_loss, tb_logger, opts)
-    return log_probabilities
+    return log_likelihood

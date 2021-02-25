@@ -142,9 +142,9 @@ class AttentionModel(nn.Module):
         # DataParallel since sequences can be of different lengths
         ll, log_prob = self._calc_log_likelihood(_log_p, pi, mask)
         if return_pi:
-            return cost, ll, pi, log_prob
+            return cost, ll, pi
 
-        return cost, ll, log_prob
+        return cost, ll
 
     def beam_search(self, *args, **kwargs):
         return self.problem.beam_search(*args, **kwargs, model=self)
@@ -250,9 +250,10 @@ class AttentionModel(nn.Module):
                     state = state[unfinished]
                     fixed = fixed[unfinished]
 
-            log_p, mask = self._get_log_p(fixed, state)
+            log_p, mask, prob = self._get_log_p(fixed, state)
             
             # Select the indices of the next nodes in the sequences, result (batch_size) long
+            # print('Check if probs match', log_p.exp()[:,0,:], prob[:,0,:])
             selected = self._select_node(log_p.exp()[:, 0, :], mask[:, 0, :])  # Squeeze out steps dimension
 
             state = state.update(selected)
@@ -362,10 +363,12 @@ class AttentionModel(nn.Module):
 
         if normalize:
             log_p = torch.log_softmax(log_p / self.temp, dim=-1)
+            prob = torch.softmax(log_p / self.temp, dim=-1)
 
         assert not torch.isnan(log_p).any()
+        assert not torch.isnan(prob).any()
 
-        return log_p, mask
+        return log_p, mask, prob
 
     def _get_parallel_step_context(self, embeddings, state, from_depot=False):
         """

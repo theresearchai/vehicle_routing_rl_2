@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 import math
 import numpy as np
-from utils import move_to
+
 
 class Encoder(nn.Module):
     """Maps a graph represented as an input sequence
@@ -11,7 +11,7 @@ class Encoder(nn.Module):
     def __init__(self, input_dim, hidden_dim):
         super(Encoder, self).__init__()
         self.hidden_dim = hidden_dim
-        self.lstm = nn.LSTM(128, hidden_dim)
+        self.lstm = nn.LSTM(input_dim, hidden_dim)
         self.init_hx, self.init_cx = self.init_hidden(hidden_dim)
 
     def forward(self, x, hidden):
@@ -38,12 +38,11 @@ class Attention(nn.Module):
         self.project_ref = nn.Conv1d(dim, dim, 1, 1)
         self.C = C  # tanh exploration
         self.tanh = nn.Tanh()
-        self.emb_d = nn.Conv1d(1, dim, 1, 1)
-        self.project_d = nn.Conv1d(dim, dim, 1, 1)
+
         self.v = nn.Parameter(torch.FloatTensor(dim))
         self.v.data.uniform_(-(1. / math.sqrt(dim)), 1. / math.sqrt(dim))
         
-    def forward(self, query, ref, demand):
+    def forward(self, query, ref):
         """
         Args: 
             query: is the hidden state of the decoder at the current
@@ -56,20 +55,13 @@ class Attention(nn.Module):
         q = self.project_query(query).unsqueeze(2)  # batch x dim x 1
         e = self.project_ref(ref)  # batch_size x hidden_dim x sourceL 
         # expand the query by sourceL
-
-        emb_d = self.emb_d(demand)
-        # emb_d = emb_d.unsqueeze(2)
-
-        d = self.project_d(emb_d)
-
         # batch x dim x sourceL
-        expanded_q = q.repeat(1, 1, e.size(2))
-        
+        expanded_q = q.repeat(1, 1, e.size(2)) 
         # batch x 1 x hidden_dim
         v_view = self.v.unsqueeze(0).expand(
                 expanded_q.size(0), len(self.v)).unsqueeze(1)
         # [batch_size x 1 x hidden_dim] * [batch_size x hidden_dim x sourceL]
-        u = torch.bmm(v_view, self.tanh(expanded_q + e + d)).squeeze(1)
+        u = torch.bmm(v_view, self.tanh(expanded_q + e)).squeeze(1)
         if self.use_tanh:
             logits = self.C * self.tanh(u)
         else:
@@ -235,46 +227,24 @@ class CriticNetworkLSTM(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, 1)
         )
-        self.init_embed_depot = nn.Linear(2, 128)
-        self.init_embed = nn.Linear(3,128)
-    
-    def _init_embed(self, inputs):
-        features = ('demand', )
-        return torch.cat(
-            (
-            self.init_embed_depot(inputs['depot'])[:, None, :],
-            self.init_embed(torch.cat((
-            inputs['loc'],
-            *(inputs[feat][:, :, None] for feat in features)
-            ), -1))
-            ),
-            1
-        )
 
     def forward(self, inputs):
         """
         Args:
             inputs: [embedding_dim x batch_size x sourceL] of embedded inputs
         """
-        #inputs = inputs['loc'].transpose(0, 1).contiguous()
-        demand = inputs['demand']
-        add_depot_demand = torch.zeros([512, 1])
-        add_depot_demand = move_to(add_depot_demand, 'cuda:0')
-        demand = torch.cat((demand, add_depot_demand), dim = 1)
-        demand = demand.unsqueeze(1)
-        init_embed = self._init_embed(inputs)
-        inputs2 = init_embed.transpose(0, 1).contiguous()
+        inputs = inputs.transpose(0, 1).contiguous()
 
-        encoder_hx = self.encoder.init_hx.unsqueeze(0).repeat(inputs2.size(1), 1).unsqueeze(0)
-        encoder_cx = self.encoder.init_cx.unsqueeze(0).repeat(inputs2.size(1), 1).unsqueeze(0)
-
+        encoder_hx = self.encoder.init_hx.unsqueeze(0).repeat(inputs.size(1), 1).unsqueeze(0)
+        encoder_cx = self.encoder.init_cx.unsqueeze(0).repeat(inputs.size(1), 1).unsqueeze(0)
+        
         # encoder forward pass
-        enc_outputs, (enc_h_t, enc_c_t) = self.encoder(inputs2, (encoder_hx, encoder_cx))
+        enc_outputs, (enc_h_t, enc_c_t) = self.encoder(inputs, (encoder_hx, encoder_cx))
         
         # grab the hidden state and process it via the process block 
         process_block_state = enc_h_t[-1]
         for i in range(self.n_process_block_iters):
-            ref, logits = self.process_block(process_block_state, enc_outputs, demand)
+            ref, logits = self.process_block(process_block_state, enc_outputs)
             process_block_state = torch.bmm(ref, self.sm(logits).unsqueeze(2)).squeeze(2)
         # produce the final scalar output
         out = self.decoder(process_block_state)
