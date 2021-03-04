@@ -18,15 +18,21 @@ Finding suboptimal heuristics is a tedious task because of the large number of s
 * It uses an encoder and decoder to train a model to learn to solve the CVRP problem. 
 * We use a system of N nodes such that each node is represented in a 2D coordinate plane to describe the input. The input is fed into the encoder, consisting of a Multi-Headed Attention layer and a Feed-Forward layer.
 * Running the input through N sequential layers of encoder we generate two outputs: node embeddings and graph embeddings. The node embeddings are the continuous vector representations of coordinates and the graph embeddings are the aggregated (mean) node embeddings.
+
+![alt text](https://github.com/theresearchai/vehicle_routing_rl_2/blob/main/images/encoder.png)
 * The decoder uses the outputs from the encoder along with the outputs from the previous timestamp. The process is sequential in time, which means the decoder produces an output at every timestamp. Combining the inputs in the decoder we generate a context node to represent the decoding context of the problem. Using the context nodes and node embeddings we then work towards generating normalized output probabilities, which then decides the next node in the routing plan. The training of the model is done by minimizing the expected cost of the tour length using a policy gradient method.
+
+![alt text](https://github.com/theresearchai/vehicle_routing_rl_2/blob/main/images/decoder.png)
 
 
 #### Proximal Policy Optimization (PPO)
-* PPO is motivated by the question: how can we take the biggest possible improvement step on a policy using the data we currently have, without stepping so far that we accidentally cause performance collapse? PPO is a family of first-order methods that use a few other tricks to keep new policies close to old. PPO methods are significantly simpler to implement, and empirically seem to perform at least as well as TRPO.
+* PPO is motivated by the question: how can we take the biggest possible improvement step on a policy using the data we currently have, without stepping so far that we accidentally cause performance collapse? PPO is a family of first-order methods that use a few other tricks to keep new policies close to old. PPO methods are significantly simple to implement.
+![alt text](https://github.com/theresearchai/vehicle_routing_rl_2/blob/main/images/ppo.PNG)
 * There are two primary variants of PPO: PPO-Penalty and PPO-Clip.
     * PPO-Penalty
     * PPO-Clip
 We use the PPO-Clip with the loss as:
+![alt text](https://github.com/theresearchai/vehicle_routing_rl_2/blob/main/images/ppo%20loss.png)
 
 #### Weights and Biases
 * Weights & Biases is used to track machine learning projects.
@@ -53,6 +59,7 @@ We use the PPO-Clip with the loss as:
 * tqdm
 * [tensorboard_logger](https://github.com/TeamHG-Memex/tensorboard_logger)
 * Matplotlib (optional, only for plotting)
+* Wandb
 
 ### Generating data
 
@@ -61,6 +68,11 @@ Training data is generated on the fly. To generate validation and test data (sam
 !python generate_data_validation.py --problem all --name validation --seed 4321 -f
 !python generate_data_test.py --problem all --name test --seed 4321 -f
 ```
+### Training
+
+```bash
+python run.py <parameters>
+```
 
 ## Conclusions
 * Validation results shows comparable performance to State-of-the-Art or reference model.
@@ -68,20 +80,17 @@ Training data is generated on the fly. To generate validation and test data (sam
 * The reference model and new implementation work well for different distributions of nodes.
 * Few cases result in termination due to routes where the condition of total route demand <= capacity fails.
 
-### Training
-
-```bash
-python run.py <parameters>
-```
-
-
-
 
 ## Acknowledgements
-Thanks to [pemami4911/neural-combinatorial-rl-pytorch](https://github.com/pemami4911/neural-combinatorial-rl-pytorch) for getting me started with the code for the Pointer Network.
+Thanks to [Wouter Kool’s “Attention, Learn to Solve Routing Problems!”](https://github.com/wouterkool/attention-learn-to-route) for getting us started with the code for the Attention Network.
 
-This repository includes adaptions of the following repositories as baselines:
-* https://github.com/MichelDeudon/encode-attend-navigate
-* https://github.com/mc-ride/orienteering
-* https://github.com/jordanamecler/PCTSP
-* https://github.com/rafael2reis/salesman
+## References:
+   [1] Kool, W. (2018, March 22). Attention, Learn to Solve Routing Problems! Retrieved from https://arxiv.org/abs/1803.08475
+   
+   [2] Schulman, J. (2017, July 20). Proximal Policy Optimization Algorithms. Retrieved from https://arxiv.org/abs/1707.06347
+   
+   [3] “TensorBoard:TensorFlow.” TensorFlow, www.tensorflow.org/tensorboard
+   
+   [4] Weights & Biases – Developer Tools for ML, www.wandb.com/
+   
+   [5] Proximal policy optimization¶. (n.d.). Retrieved March 04, 2021, from https://spinningup.openai.com/en/latest/algorithms/ppo.html
