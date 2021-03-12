@@ -71,7 +71,8 @@ Training data is generated on the fly. To generate validation and test data (sam
 ### Training
 
 ```bash
-python run.py <parameters>
+!python run.py --graph_size 20 --baseline rollout --problem 'cvrp' --n_epoch 10 --epoch_size 1280000 #for PPO reinforce
+!python run.py --graph_size 20 --baseline critic_lstm --problem 'cvrp' --n_epoch 10 --epoch_size 1280000 # for PPO LSTM
 ```
 
 ## Conclusions
