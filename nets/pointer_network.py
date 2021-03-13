@@ -5,6 +5,7 @@ import math
 import numpy as np
 from utils import move_to
 
+# Encoder configuration for Critic model
 class Encoder(nn.Module):
     """Maps a graph represented as an input sequence
     to a hidden vector"""
@@ -18,6 +19,7 @@ class Encoder(nn.Module):
         output, hidden = self.lstm(x, hidden)
         return output, hidden
     
+    ## Uniform initialization to avoid vanishing gradient problem
     def init_hidden(self, hidden_dim):
         """Trainable initial hidden state"""
         std = 1. / math.sqrt(hidden_dim)
@@ -28,7 +30,7 @@ class Encoder(nn.Module):
         enc_init_cx.data.uniform_(-std, std)
         return enc_init_hx, enc_init_cx
 
-
+# Attention layer configuration for Critic LSTM 
 class Attention(nn.Module):
     """A generic attention module for a decoder in seq2seq"""
     def __init__(self, dim, use_tanh=False, C=10):
@@ -50,6 +52,8 @@ class Attention(nn.Module):
                 time step. batch x dim
             ref: the set of hidden states from the encoder. 
                 sourceL x batch x hidden_dim
+            demand: the demand of each nodes
+                batch x 1 X number of nodes + 1
         """
         # ref is now [batch_size x hidden_dim x sourceL]
         ref = ref.permute(1, 2, 0)
@@ -76,7 +80,7 @@ class Attention(nn.Module):
             logits = u  
         return e, logits
 
-
+# Used for Pointer network only (Only applicable TSP)
 class Decoder(nn.Module):
     def __init__(self, 
             embedding_dim,
@@ -212,9 +216,8 @@ class Decoder(nn.Module):
 
         return idxs
 
-
+# Critic LSTM Network for CVRP
 class CriticNetworkLSTM(nn.Module):
-    """Useful as a baseline in REINFORCE updates"""
     def __init__(self,
             embedding_dim,
             hidden_dim,
@@ -223,21 +226,28 @@ class CriticNetworkLSTM(nn.Module):
             use_tanh):
         super(CriticNetworkLSTM, self).__init__()
         
+        # The dimension for hidden layer (default value 128) 
         self.hidden_dim = hidden_dim
         self.n_process_block_iters = n_process_block_iters
-
+        
+        # Initialize the LSTM encoder with embedding_dim (128) and hidden_dim 
         self.encoder = Encoder(embedding_dim, hidden_dim)
         
+        # Initialize the Attention Layer with the same dimension size for hidden layer
         self.process_block = Attention(hidden_dim, use_tanh=use_tanh, C=tanh_exploration)
         self.sm = nn.Softmax(dim=1)
+
+        # Decoder to calculate the Value function for each problem instance in batch
         self.decoder = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, 1)
         )
+        # Initialize the embedding dimension for depot and nodes
         self.init_embed_depot = nn.Linear(2, 128)
         self.init_embed = nn.Linear(3,128)
     
+    # Create embeddings by combining nodes depot and demands of nodes 
     def _init_embed(self, inputs):
         features = ('demand', )
         return torch.cat(
@@ -256,12 +266,15 @@ class CriticNetworkLSTM(nn.Module):
         Args:
             inputs: [embedding_dim x batch_size x sourceL] of embedded inputs
         """
-        #inputs = inputs['loc'].transpose(0, 1).contiguous()
+        # Load the demands of each variable (Can reduce model load by combining embeddings with all demands?)
         demand = inputs['demand']
+        # Add Depot with 0 demand to the tensor
         add_depot_demand = torch.zeros([512, 1])
         add_depot_demand = move_to(add_depot_demand, 'cuda:0')
         demand = torch.cat((demand, add_depot_demand), dim = 1)
         demand = demand.unsqueeze(1)
+
+        # Call the create embedding functin
         init_embed = self._init_embed(inputs)
         inputs2 = init_embed.transpose(0, 1).contiguous()
 
@@ -269,18 +282,26 @@ class CriticNetworkLSTM(nn.Module):
         encoder_cx = self.encoder.init_cx.unsqueeze(0).repeat(inputs2.size(1), 1).unsqueeze(0)
 
         # encoder forward pass
+        # The hidden states of encoder (LSTM) contains information about the complete problem instance (input graph)
+        # Use the hidden states and outputs as inputs for Attention layer
         enc_outputs, (enc_h_t, enc_c_t) = self.encoder(inputs2, (encoder_hx, encoder_cx))
         
         # grab the hidden state and process it via the process block 
         process_block_state = enc_h_t[-1]
         for i in range(self.n_process_block_iters):
+            
+            # Use the hidden states in the attention layer
+            # Attention layer now keeps the whole problem instance and can be used for calculating value function  
             ref, logits = self.process_block(process_block_state, enc_outputs, demand)
+
+            # Use the logits from previous layer and pass through a softmax function
             process_block_state = torch.bmm(ref, self.sm(logits).unsqueeze(2)).squeeze(2)
-        # produce the final scalar output
+        
+        # produce the final scalar value function for all problem instance in batch
         out = self.decoder(process_block_state)
         return out
 
-
+# Pointer network(Only applicable TSP)
 class PointerNetwork(nn.Module):
 
     def __init__(self,
