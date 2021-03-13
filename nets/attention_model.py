@@ -10,7 +10,8 @@ from torch.nn import DataParallel
 from utils.beam_search import CachedLookup
 from utils.functions import sample_many
 
-
+#Decode type is either greedy or sampling. 
+#Greedy chooses action with maximum probability while sampling chooses an action according to multinomial distribution. 
 def set_decode_type(model, decode_type):
     if isinstance(model, DataParallel):
         model = model.module
@@ -199,6 +200,7 @@ class AttentionModel(nn.Module):
         # Calculate log_likelihood
         return log_p.sum(1), log_p
 
+    #This creates an input embedding from the node locations, demand, and depot
     def _init_embed(self, input):
 
         if self.is_vrp or self.is_orienteering or self.is_pctsp:
