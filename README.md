@@ -99,9 +99,4 @@ Thanks to [Wouter Kool’s “Attention, Learn to Solve Routing Problems!”](ht
    
    [5] Proximal policy optimization¶. (n.d.). Retrieved March 04, 2021, from https://spinningup.openai.com/en/latest/algorithms/ppo.html
    
-   [6] Sweeps. (n.d.). Retrieved March 14, 2021, from https://docs.wandb.ai/sweeps#common-use-cases
-![image](https://user-images.githubusercontent.com/59860147/111056010-67d15200-8430-11eb-974d-6799b207ef5e.png)
-
-   
-   
-
+   [6] Sweeps. (n.d.). Retrieved March 14, 2021, from https://docs.wandb.ai/sweeps#common-use-cases  
