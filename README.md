@@ -1,4 +1,4 @@
-# Vehicle routing using reinforcement learning
+# Vehicle routing using reinforcement learning*
 
 ## Introduction
 * The Vehicle Routing Problem is a combinatorial optimization problem which asks "What is the optimal set of routes for a fleet of vehicles to traverse in order to deliver to a given set of customers?“
@@ -95,3 +95,6 @@ Thanks to [Wouter Kool’s “Attention, Learn to Solve Routing Problems!”](ht
    [4] Weights & Biases – Developer Tools for ML, www.wandb.com/
    
    [5] Proximal policy optimization¶. (n.d.). Retrieved March 04, 2021, from https://spinningup.openai.com/en/latest/algorithms/ppo.html
+   
+   
+* The repository contains experiments for CVRP as well as other types of problems. Please refer to the tranining commands for CVRP
