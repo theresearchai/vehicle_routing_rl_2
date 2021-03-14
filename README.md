@@ -85,6 +85,9 @@ Training data is generated on the fly. To generate validation and test data (sam
 ## Acknowledgements
 Thanks to [Wouter Kool’s “Attention, Learn to Solve Routing Problems!”](https://github.com/wouterkool/attention-learn-to-route) for getting us started with the code for the Attention Network.
 
+## Note:
+*The repository contains experiments for CVRP as well as other types of problems. Please refer to the tranining commands for CVRP
+
 ## References:
    [1] Kool, W. (2018, March 22). Attention, Learn to Solve Routing Problems! Retrieved from https://arxiv.org/abs/1803.08475
    
@@ -96,5 +99,9 @@ Thanks to [Wouter Kool’s “Attention, Learn to Solve Routing Problems!”](ht
    
    [5] Proximal policy optimization¶. (n.d.). Retrieved March 04, 2021, from https://spinningup.openai.com/en/latest/algorithms/ppo.html
    
+   [6] Sweeps. (n.d.). Retrieved March 14, 2021, from https://docs.wandb.ai/sweeps#common-use-cases
+![image](https://user-images.githubusercontent.com/59860147/111056010-67d15200-8430-11eb-974d-6799b207ef5e.png)
+
    
-*The repository contains experiments for CVRP as well as other types of problems. Please refer to the tranining commands for CVRP
+   
+
