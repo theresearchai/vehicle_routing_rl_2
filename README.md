@@ -97,4 +97,4 @@ Thanks to [Wouter Kool’s “Attention, Learn to Solve Routing Problems!”](ht
    [5] Proximal policy optimization¶. (n.d.). Retrieved March 04, 2021, from https://spinningup.openai.com/en/latest/algorithms/ppo.html
    
    
-* The repository contains experiments for CVRP as well as other types of problems. Please refer to the tranining commands for CVRP
+*The repository contains experiments for CVRP as well as other types of problems. Please refer to the tranining commands for CVRP
